@@ -1,0 +1,65 @@
+'''
+ 키워드당 구글 이미지 기본 100장씩 수집
+ 현재 설정은 10장씩 수집
+ copyright from hk
+'''
+import pymysql
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+from selenium import webdriver
+from tqdm import tqdm
+import time
+import json
+import os
+from selenium.webdriver.common.keys import Keys
+
+# hostname =
+# username =
+# password =
+# tablename =
+
+conn = pymysql.connect(host =hostname, user = username, passwd = password, charset = 'utf8')
+cur = conn.cursor()
+df = pd.read_sql('SELECT * FROM tablename', con = conn)
+conn.close()
+
+
+chrome_options = webdriver.ChromeOptions()
+driver = webdriver.Chrome('/Users/hk/Downloads/chromedriver',chrome_options=chrome_options) # 크롬 웹드라이버 경로
+result = []
+
+for idx, row in tqdm(df.iterrows()):
+
+    os.mkdir("/Users/hk/Downloads/googleimg_hk/"+ row['cd_name']) # 셋팅 폴더가 경로 하위에 있어야 함.
+    url = 'https://www.google.co.kr/search?q=' + row['cd_name'] +'&tbm=isch&source=lnt&tbs=itp:photo&sa=X&ved=0ahUKEwjC_aP9qfbdAhULVrwKHQqLAgkQpwUIHA&biw=960&bih=1006&dpr=2'
+
+    driver.get(url)
+
+    html = driver.page_source
+    soup = BeautifulSoup(html, "lxml")
+    soup = soup.find_all('div', class_='rg_meta notranslate')
+    dic = {'cd_pk' : '', 'cd_name' : '', 'img_url' : '', 'img_title' : ''}
+    data_ = json.loads(soup[4].getText())
+    soup = [json.loads(i.getText()) for i in soup]
+
+    data = [{'no' : i , 'img_url' : j['ou'], 'page_url' : j['ru']} for i, j in enumerate(soup) if i < 10]  # 10장만 수집
+    data2 = [{'no' : m, 'img_title' : t['s']} for m, t in enumerate(soup)]
+
+    dic['cd_pk'] = row['cd_pk']
+    dic['cd_name'] = row['cd_name']
+    dic['img_url'] = data
+    dic['img_title'] = data2
+    result.append(dic)
+
+    for i in tqdm(data):
+        try:
+            res = requests.get(i['img_url']).content
+            f = open("/Users/hk/Downloads/googleimg_hk/"+ row['cd_name'] +'/' + str(i['no']+1) +'.jpg', 'wb')
+            f.write(res)
+            f.close()
+
+        except:
+            pass
+
+pd.DataFrame(result).to_excel('/Users/hk/Downloads/googleimg_hk/googleimg_hk_info.xlsx', index=False) # 수집된 이미지들의 url이 엑셀파일에 저장됨.
